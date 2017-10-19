@@ -4,6 +4,7 @@
 # Distributed under the terms of the Modified BSD License.
 
 import re
+import os
 from datetime import timedelta
 from http.client import responses
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
@@ -161,7 +162,7 @@ class BaseHandler(RequestHandler):
 
     def get_current_user_oauth_token(self):
         """Get the current user identified by OAuth access token
-        
+
         Separate from API token because OAuth access tokens
         can only be used for identifying users,
         not using the API.
@@ -174,7 +175,7 @@ class BaseHandler(RequestHandler):
             return None
         else:
             return self._user_from_orm(orm_token.user)
-    
+
     def get_current_user_token(self):
         """get_current_user from Authorization header token"""
         token = self.get_auth_token()
@@ -303,7 +304,7 @@ class BaseHandler(RequestHandler):
 
     def get_next_url(self, user=None):
         """Get the next_url for login redirect
-        
+
         Defaults to hub base_url /hub/ if user is not running,
         otherwise user.url.
         """
@@ -585,6 +586,11 @@ class BaseHandler(RequestHandler):
     @property
     def template_namespace(self):
         user = self.get_current_user()
+        if 'GITHUB_HOST' in os.environ and 'GITHUB_CLIENT_ID' in os.environ:
+            revoke_access_url = 'https://{}/settings/connections/applications/{}'.format(os.environ['GITHUB_HOST'], os.environ['GITHUB_CLIENT_ID'])
+        else:
+            revoke_access_url = '/'
+
         return dict(
             base_url=self.hub.base_url,
             prefix=self.base_url,
@@ -593,6 +599,7 @@ class BaseHandler(RequestHandler):
             login_service=self.authenticator.login_service,
             logout_url=self.settings['logout_url'],
             static_url=self.static_url,
+            revoke_access_url=revoke_access_url,
             version_hash=self.version_hash,
         )
 
@@ -819,13 +826,13 @@ class UserSpawnHandler(BaseHandler):
 
 class UserRedirectHandler(BaseHandler):
     """Redirect requests to user servers.
-    
+
     Allows public linking to "this file on your server".
-    
+
     /user-redirect/path/to/foo will redirect to /user/:name/path/to/foo
-    
+
     If the user is not logged in, send to login URL, redirecting back here.
-    
+
     .. versionadded:: 0.7
     """
     @web.authenticated
