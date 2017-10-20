@@ -109,7 +109,10 @@
             {% block login_widget %}
               <span id="login_widget">
                 {% if user %}
-                  <a id="revoke_access" role="button" class="navbar-btn btn-sm btn btn-default" href="{{revoke_access_url}}"> <i aria-hidden="true" class="fa fa-sign-out"></i> Revoke access</a>
+                  {% if user.running %}
+                  <a id="stop" role="button" class="btn btn-lg btn-danger">Stop My Server</a>
+                  {% endif %}
+                  <a id="revoke_access" role="button" class="navbar-btn btn-sm btn btn-default" href="{{revoke_access_url}}" target="_blank"> <i aria-hidden="true" class="fa fa-sign-out"></i> Revoke GHE access</a>
                   <a id="logout" role="button" class="navbar-btn btn-sm btn btn-default" href="{{logout_url}}"> <i aria-hidden="true" class="fa fa-sign-out"></i> Logout</a>
                 {% else %}
                   <a id="login" role="button" class="btn-sm btn navbar-btn btn-default" href="{{login_url}}">Login</a>
@@ -135,6 +138,9 @@
 {% endcall %}
 
 {% block script %}
+<script type="text/javascript">
+require(["page"]);
+</script>
 {% endblock %}
 
 </body>
