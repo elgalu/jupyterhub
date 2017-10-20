@@ -149,15 +149,15 @@ page_template = """
     <a id='stop' class='btn btn-danger btn-sm navbar-btn pull-right'
        style='margin-right: 2px; margin-left: 2px;'
        href='{{hub_control_panel_url}}'>
-        Stop This Server
+        Stop Server
     </a>
 </span>
 
 <span>
-    <a id='revoke_access' class='btn btn-danger btn-sm navbar-btn pull-right'
-       style='margin-right: 2px; margin-left: 2px;'
+    <a id='revoke_access' class='btn btn-default btn-sm navbar-btn pull-right'
+       style='margin-right: 2px; margin-left: 2px; color: #cb2431; font-weight: 600;'
        href='{{revoke_access_url}}' target='_blank'>
-        Revoke GHE access
+        Revoke GHE
     </a>
 </span>
 
@@ -167,7 +167,7 @@ page_template = """
     <a href='{{hub_control_panel_url}}'
        class='btn btn-default btn-sm navbar-btn pull-right'
        style='margin-right: 2px; margin-left: 2px;'>
-        Control Panel
+        Home
     </a>
 </span>
 {% endblock %}
