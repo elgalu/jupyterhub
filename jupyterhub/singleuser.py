@@ -138,16 +138,35 @@ flags.update({
     }, "Disable user-controlled configuration of the notebook server.")
 })
 
+# Note: super() comes from:
+#   https://github.com/jupyter/notebook/blob/master/notebook/templates/page.html#L132
 page_template = """
 {% extends "templates/page.html" %}
 
 {% block header_buttons %}
+
+<span>
+    <a id='stop' class='btn btn-danger btn-sm navbar-btn pull-right'
+       style='margin-right: 2px; margin-left: 2px;'
+       href='{{hub_control_panel_url}}'>
+        Stop This Server
+    </a>
+</span>
+
+<span>
+    <a id='revoke_access' class='btn btn-danger btn-sm navbar-btn pull-right'
+       style='margin-right: 2px; margin-left: 2px;'
+       href='{{revoke_access_url}}' target='_blank'>
+        Revoke GHE access
+    </a>
+</span>
+
 {{super()}}
 
 <span>
     <a href='{{hub_control_panel_url}}'
        class='btn btn-default btn-sm navbar-btn pull-right'
-       style='margin-right: 4px; margin-left: 2px;'>
+       style='margin-right: 2px; margin-left: 2px;'>
         Control Panel
     </a>
 </span>
@@ -181,7 +200,7 @@ class SingleUserNotebookApp(NotebookApp):
     subcommands = {}
     version = __version__
     classes = NotebookApp.classes + [HubOAuth]
-    
+
     # don't store cookie secrets
     cookie_secret_file = ''
     # always generate a new cookie secret on launch
@@ -193,7 +212,7 @@ class SingleUserNotebookApp(NotebookApp):
 
     user = CUnicode().tag(config=True)
     group = CUnicode().tag(config=True)
-    
+
     @default('user')
     def _default_user(self):
         return os.environ.get('JUPYTERHUB_USER') or ''
@@ -340,7 +359,7 @@ class SingleUserNotebookApp(NotebookApp):
     @gen.coroutine
     def check_hub_version(self):
         """Test a connection to my Hub
-        
+
         - exit if I can't connect at all
         - check version and warn on sufficient mismatch
         """
@@ -357,7 +376,7 @@ class SingleUserNotebookApp(NotebookApp):
                 break
         else:
             self.exit(1)
-        
+
         hub_version = resp.headers.get('X-JupyterHub-Version')
         _check_version(hub_version, __version__, self.log)
 
@@ -413,11 +432,11 @@ class SingleUserNotebookApp(NotebookApp):
             urlparse(self.hub_auth.oauth_redirect_uri).path,
             OAuthCallbackHandler
         )])
-        
+
         # apply X-JupyterHub-Version to *all* request handlers (even redirects)
         self.patch_default_headers()
         self.patch_templates()
-    
+
     def patch_default_headers(self):
         if hasattr(RequestHandler, '_orig_set_default_headers'):
             return
@@ -438,6 +457,12 @@ class SingleUserNotebookApp(NotebookApp):
 
         env.globals['hub_control_panel_url'] = \
             self.hub_host + url_path_join(self.hub_prefix, 'home')
+
+        if 'GITHUB_HOST' in os.environ and 'GITHUB_CLIENT_ID' in os.environ:
+            env.globals['revoke_access_url'] = \
+                'https://{}/settings/connections/applications/{}'.format(os.environ['GITHUB_HOST'], os.environ['GITHUB_CLIENT_ID'])
+        else:
+            env.globals['revoke_access_url'] = '/'
 
         # patch jinja env loading to modify page template
         def get_page(name):

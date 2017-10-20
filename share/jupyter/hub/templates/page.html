@@ -110,7 +110,7 @@
               <span id="login_widget">
                 {% if user %}
                   {% if user.running %}
-                  <a id="stop" role="button" class="btn btn-lg btn-danger">Stop My Server</a>
+                  <a id="stop" role="button" class="navbar-btn btn-sm btn btn-danger">Stop My Server</a>
                   {% endif %}
                   <a id="revoke_access" role="button" class="navbar-btn btn-sm btn btn-default" href="{{revoke_access_url}}" target="_blank"> <i aria-hidden="true" class="fa fa-sign-out"></i> Revoke GHE access</a>
                   <a id="logout" role="button" class="navbar-btn btn-sm btn btn-default" href="{{logout_url}}"> <i aria-hidden="true" class="fa fa-sign-out"></i> Logout</a>

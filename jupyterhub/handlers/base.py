@@ -587,7 +587,8 @@ class BaseHandler(RequestHandler):
     def template_namespace(self):
         user = self.get_current_user()
         if 'GITHUB_HOST' in os.environ and 'GITHUB_CLIENT_ID' in os.environ:
-            revoke_access_url = 'https://{}/settings/connections/applications/{}'.format(os.environ['GITHUB_HOST'], os.environ['GITHUB_CLIENT_ID'])
+            revoke_access_url = \
+                'https://{}/settings/connections/applications/{}'.format(os.environ['GITHUB_HOST'], os.environ['GITHUB_CLIENT_ID'])
         else:
             revoke_access_url = '/'
 
