@@ -7,6 +7,11 @@
     <div class="text-center">
       <p>Your server is starting up.</p>
       <p>You will be redirected automatically when it's ready for you.</p>
+
+      <div id="spawn-pending-progress">
+        <div id="spawn-pending-bar">3%</div>
+      </div>
+
       <p><i class="fa fa-spinner fa-pulse fa-fw fa-3x" aria-hidden="true"></i></p>
       <a role="button" id="refresh" class="btn btn-lg btn-primary" href="#">refresh</a>
     </div>
@@ -18,12 +23,44 @@
 {% block script %}
 <script type="text/javascript">
 require(["jquery"], function ($) {
+  var currentLocationUrl = window.location.href;
+
   $("#refresh").click(function () {
     window.location.reload();
   })
-  setTimeout(function () {
-    window.location.reload();
-  }, 5000);
+
+  function checkServerReady() {
+    $.ajax({
+      'url' : '/hub/home',
+      'type' : 'GET',
+      'success' : function(data) {
+        if (data.includes('stop-button')) {
+          window.location.reload();
+        }
+      }
+    });
+  }
+
+  function runSpawnProgressBar() {
+    var elem = document.getElementById("spawn-pending-bar");
+    var width = 3;
+    var ms = Math.floor(Math.random() * 600) + 4200;
+    var id = setInterval(frame, ms);
+
+    function frame() {
+      if (width >= 98) {
+        clearInterval(id);
+      } else {
+        width++;
+        elem.style.width = width + '%';
+        elem.innerHTML = width * 1  + '%';
+        checkServerReady();
+      }
+    }
+  }
+
+  runSpawnProgressBar();
+
 });
 </script>
 {% endblock %}

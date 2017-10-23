@@ -146,7 +146,7 @@ page_template = """
 {% block header_buttons %}
 
 <span>
-    <a id='stop' class='btn btn-danger btn-sm navbar-btn pull-right'
+    <a id='stop-singleuser-navbar' class='btn btn-danger btn-sm navbar-btn pull-right'
        style='margin-right: 2px; margin-left: 2px;'
        href='{{hub_control_panel_url}}'>
         Stop Server
