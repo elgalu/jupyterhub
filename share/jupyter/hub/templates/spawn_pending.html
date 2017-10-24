@@ -44,18 +44,19 @@ require(["jquery"], function ($) {
   function runSpawnProgressBar() {
     var elem = document.getElementById("spawn-pending-bar");
     var width = 3;
-    var ms = Math.floor(Math.random() * 600) + 4200;
+    var ms = Math.floor(Math.random() * 1600) + 4200;
     var id = setInterval(frame, ms);
 
     function frame() {
       if (width >= 98) {
-        clearInterval(id);
+        // clearInterval(id);
+        console.log('Waiting time overflow');
       } else {
         width++;
         elem.style.width = width + '%';
         elem.innerHTML = width * 1  + '%';
-        checkServerReady();
       }
+      checkServerReady();
     }
   }
 
