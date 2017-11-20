@@ -69,6 +69,24 @@
     </script>
 
     {% block meta %}
+
+    <!-- Global site tag (gtag.js) - Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id={{ga_trackingid}}"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', '{{ga_trackingid}}', {
+        'custom_map': {'dimension1': 'team'}
+      });
+
+      gtag('set', {'user_id': '{{ga_userid}}'}); // Set the user ID using signed-in user_id.
+
+      // TODO: Send an event that passes 'team' custom dimension as a parameter.
+      // gtag('event', 'team_dimension', {'team': 'tbd_team_id'});
+    </script>
+
     {% endblock %}
 
 </head>

@@ -464,6 +464,16 @@ class SingleUserNotebookApp(NotebookApp):
         else:
             env.globals['revoke_access_url'] = '/'
 
+        if 'GA_TRACKING_ID' in os.environ:
+            env.globals['ga_trackingid'] = os.environ['GA_TRACKING_ID']
+        else:
+            env.globals['ga_trackingid'] = 'UA-111111111-1'
+
+        if 'USER' in os.environ:
+            env.globals['ga_userid'] = os.environ['USER']
+        else:
+            env.globals['ga_userid'] = 'unknown'
+
         # patch jinja env loading to modify page template
         def get_page(name):
             if name == 'page.html':

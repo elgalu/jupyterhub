@@ -592,6 +592,16 @@ class BaseHandler(RequestHandler):
         else:
             revoke_access_url = '/'
 
+        if 'GA_TRACKING_ID' in os.environ:
+            ga_trackingid = os.environ['GA_TRACKING_ID']
+        else:
+            ga_trackingid = 'UA-111111111-1'
+
+        if 'USER' in os.environ:
+            ga_userid = os.environ['USER']
+        else:
+            ga_userid = 'unknown'
+
         return dict(
             base_url=self.hub.base_url,
             prefix=self.base_url,
@@ -601,6 +611,8 @@ class BaseHandler(RequestHandler):
             logout_url=self.settings['logout_url'],
             static_url=self.static_url,
             revoke_access_url=revoke_access_url,
+            ga_trackingid=ga_trackingid,
+            ga_userid=ga_userid,
             version_hash=self.version_hash,
         )
 
