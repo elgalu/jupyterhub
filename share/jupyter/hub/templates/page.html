@@ -77,14 +77,20 @@
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
 
+      // custom_map is to avoid doing: gtag('set', 'dimension2', '{{user.name}}');
+      // but doing instead: gtag('event', 'hub', {'user': '{{user.name}}'});
       gtag('config', '{{ga_trackingid}}', {
-        'custom_map': {'dimension1': 'team'}
+        'custom_map': {'dimension1': 'team', 'dimension2': 'user'}
       });
 
-      gtag('set', {'user_id': '{{ga_userid}}'}); // Set the user ID using signed-in user_id.
+      gtag('set', {'user_id': '{{user.name}}'}); // Set the user ID using signed-in user_id.
+
+      gtag('event', 'hub', {
+        'user': '{{user.name}}'
+      });
 
       // TODO: Send an event that passes 'team' custom dimension as a parameter.
-      // gtag('event', 'team_dimension', {'team': 'tbd_team_id'});
+      // gtag('event', 'hub', {'team': 'tbd_team_id'});
     </script>
 
     {% endblock %}
