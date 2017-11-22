@@ -608,6 +608,16 @@ class BaseHandler(RequestHandler):
         else:
             ga_userid = 'unknown'
 
+        if 'HUB_VERSION' in os.environ:
+            hub_version = os.environ['HUB_VERSION']
+        else:
+            hub_version = 'unknown'
+
+        if 'SINGLEUSER_VERSION' in os.environ:
+            singleuser_version = os.environ['SINGLEUSER_VERSION']
+        else:
+            singleuser_version = 'unknown'
+
         return dict(
             base_url=self.hub.base_url,
             prefix=self.base_url,
@@ -619,6 +629,8 @@ class BaseHandler(RequestHandler):
             revoke_access_url=revoke_access_url,
             ga_trackingid=ga_trackingid,
             ga_userid=ga_userid,
+            hub_version=hub_version,
+            singleuser_version=singleuser_version,
             version_hash=self.version_hash,
         )
 

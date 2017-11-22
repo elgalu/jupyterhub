@@ -174,6 +174,7 @@ page_template = """
 {% block logo %}
 <img src='{{logo_url}}' alt='Jupyter Notebook'/>
 {% endblock logo %}
+<span id='singleuser-version' style='font-size: 8px;'>{{singleuser_version}}</span>
 """
 
 
@@ -473,6 +474,16 @@ class SingleUserNotebookApp(NotebookApp):
             env.globals['ga_userid'] = os.environ['USER']
         else:
             env.globals['ga_userid'] = 'unknown'
+
+        if 'HUB_VERSION' in os.environ:
+            env.globals['hub_version'] = os.environ['HUB_VERSION']
+        else:
+            env.globals['hub_version'] = 'unknown'
+
+        if 'SINGLEUSER_VERSION' in os.environ:
+            env.globals['singleuser_version'] = os.environ['SINGLEUSER_VERSION']
+        else:
+            env.globals['singleuser_version'] = 'unknown'
 
         # patch jinja env loading to modify page template
         def get_page(name):
