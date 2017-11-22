@@ -145,6 +145,29 @@ page_template = """
 
 {% block header_buttons %}
 
+    <!-- Global site tag (gtag.js) - Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id={{ga_trackingid}}"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      // custom_map is to avoid doing: gtag('set', 'dimension2', '{{ga_userid}}');
+      // but doing instead: gtag('event', 'notebook', {'user': '{{ga_userid}}'});
+      gtag('config', '{{ga_trackingid}}', {
+        'custom_map': {'dimension1': 'team', 'dimension2': 'user'}
+      });
+
+      gtag('set', {'user_id': '{{ga_userid}}'}); // Set the user ID using signed-in user_id.
+
+      gtag('event', 'notebook', {
+        'user': '{{ga_userid}}'
+      });
+
+      // TODO: Send an event that passes 'team' custom dimension as a parameter.
+      // gtag('event', 'notebook', {'team': 'tbd_team_id'});
+    </script>
+
 <span>
     <a id='stop-singleuser-navbar' class='btn btn-danger btn-sm navbar-btn pull-right'
        style='margin-right: 2px; margin-left: 2px;'
