@@ -173,8 +173,8 @@ page_template = """
 {% endblock %}
 {% block logo %}
 <img src='{{logo_url}}' alt='Jupyter Notebook'/>
-{% endblock logo %}
 <span id='singleuser-version' style='font-size: 8px;'>{{singleuser_version}}</span>
+{% endblock logo %}
 """
 
 
