@@ -169,6 +169,14 @@ page_template = """
     </script>
 
 <span>
+    <a id='help-navbar' class='btn btn-sm navbar-btn pull-right'
+       style='margin-right: 2px; margin-left: 2px;'
+       href='{{hub_help_url}}' target='_blank'>
+        Help
+    </a>
+</span>
+
+<span>
     <a id='stop-singleuser-navbar' class='btn btn-danger btn-sm navbar-btn pull-right'
        style='margin-right: 2px; margin-left: 2px;'
        href='{{hub_control_panel_url}}'>
@@ -507,6 +515,11 @@ class SingleUserNotebookApp(NotebookApp):
             env.globals['singleuser_version'] = os.environ['SINGLEUSER_VERSION']
         else:
             env.globals['singleuser_version'] = 'unknown'
+
+        if 'HUB_HELP_URL' in os.environ:
+            env.globals['hub_help_url'] = os.environ['HUB_HELP_URL']
+        else:
+            env.globals['hub_help_url'] = '/hub/home'
 
         # patch jinja env loading to modify page template
         def get_page(name):

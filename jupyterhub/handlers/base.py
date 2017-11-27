@@ -618,6 +618,11 @@ class BaseHandler(RequestHandler):
         else:
             singleuser_version = 'unknown'
 
+        if 'HUB_HELP_URL' in os.environ:
+            hub_help_url = os.environ['HUB_HELP_URL']
+        else:
+            hub_help_url = '/'
+
         return dict(
             base_url=self.hub.base_url,
             prefix=self.base_url,
@@ -631,6 +636,7 @@ class BaseHandler(RequestHandler):
             ga_userid=ga_userid,
             hub_version=hub_version,
             singleuser_version=singleuser_version,
+            hub_help_url=hub_help_url,
             version_hash=self.version_hash,
         )
 
