@@ -73,7 +73,7 @@ JupyterHub can be installed with `pip`, and the proxy with `npm`:
 
 ```bash
 npm install -g configurable-http-proxy
-pip3 install jupyterhub    
+pip3 install jupyterhub
 ```
 
 If you plan to run notebook servers locally, you will need to install the
@@ -205,6 +205,7 @@ python3 setup.py css   # recompile CSS from LESS sources
 We use [pytest](http://doc.pytest.org/en/latest/) for **running tests**:
 
 ```bash
+export ASYNC_TEST_TIMEOUT=900
 pytest jupyterhub/tests
 ```
 

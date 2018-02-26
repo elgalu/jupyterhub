@@ -177,6 +177,14 @@ page_template = """
 </span>
 
 <span>
+    <a id='to_jupyterlab' class='btn btn-default btn-sm navbar-btn pull-right'
+       style='margin-right: 2px; margin-left: 2px; color: #3399EE; font-weight: 600;'
+       href='/user/{{ga_userid}}/lab/tree/home/{{ga_userid}}/' >
+        JupyterLab
+    </a>
+</span>
+
+<span>
     <a id='stop-singleuser-navbar' class='btn btn-danger btn-sm navbar-btn pull-right'
        style='margin-right: 2px; margin-left: 2px;'
        href='{{hub_control_panel_url}}'>
