@@ -72,6 +72,7 @@
 
     <!-- Global site tag (gtag.js) - Google Analytics -->
     <script async src="https://www.googletagmanager.com/gtag/js?id={{ga_trackingid}}"></script>
+
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
@@ -91,6 +92,22 @@
 
       // TODO: Send an event that passes 'team' custom dimension as a parameter.
       // gtag('event', 'hub', {'team': 'tbd_team_id'});
+    </script>
+
+    <script>
+      window.onload = function() {
+        function warnUsersWithAdBlocker() {
+          if (window.ga && ga.create) {
+            console.log('Google Analytics is working');
+          } else {
+            window.alert('Google Analytics is blocked! Please disable your ad blocker for this site, we really need to know if this service is being used in order to justify people maintaining and evolving it.');
+          }
+        }
+
+        setTimeout( function() {
+          warnUsersWithAdBlocker();
+        }, 1000);
+      };
     </script>
 
     {% endblock %}
