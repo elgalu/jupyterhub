@@ -95,7 +95,7 @@
     </script>
 
     <script>
-      window.onload = function() {
+      $(document).ready(function(){
         function warnUsersWithAdBlocker() {
           if (window.ga && ga.create) {
             console.log('Google Analytics is working');
@@ -107,7 +107,7 @@
         setTimeout( function() {
           warnUsersWithAdBlocker();
         }, 1000);
-      };
+      });
     </script>
 
     {% endblock %}
