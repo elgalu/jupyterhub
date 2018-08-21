@@ -621,7 +621,7 @@ class Spawner(LoggingConfigurable):
 
         # Info previously passed on args
         env['JUPYTERHUB_USER'] = self.user.name
-        env['JUPYTERHUB_API_URL'] = self.hub.api_url
+        env['JUPYTERHUB_API_URL'] = os.environ.get('JUPYTERHUB_API_URL', self.hub.api_url)
         env['JUPYTERHUB_BASE_URL'] = self.hub.base_url[:-4]
         if self.server:
             env['JUPYTERHUB_SERVICE_PREFIX'] = self.server.base_url
