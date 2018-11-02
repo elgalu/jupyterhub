@@ -91,15 +91,23 @@ def api_request(app, *api_path, **kwargs):
     headers = kwargs.setdefault('headers', {})
 
     if 'Authorization' not in headers and not kwargs.pop('noauth', False):
-        headers.update(auth_header(app.db, 'admin'))
+        # make a copy to avoid modifying arg in-place
+        kwargs['headers'] = h = {}
+        h.update(headers)
+        h.update(auth_header(app.db, 'admin'))
 
     url = ujoin(base_url, 'api', *api_path)
     method = kwargs.pop('method', 'get')
     f = getattr(async_requests, method)
+    if app.internal_ssl:
+        kwargs['cert'] = (app.internal_ssl_cert, app.internal_ssl_key)
+        kwargs["verify"] = app.internal_ssl_ca
     resp = yield f(url, **kwargs)
     assert "frame-ancestors 'self'" in resp.headers['Content-Security-Policy']
     assert ujoin(app.hub.base_url, "security/csp-report") in resp.headers['Content-Security-Policy']
     assert 'http' not in resp.headers['Content-Security-Policy']
+    if not kwargs.get('stream', False) and resp.content:
+        assert resp.headers.get('content-type') == 'application/json'
     return resp
 
 
@@ -573,15 +581,19 @@ def test_spawn(app):
 
     assert spawner.server.base_url == ujoin(app.base_url, 'user/%s' % name) + '/'
     url = public_url(app, user)
-    r = yield async_requests.get(url)
+    kwargs = {}
+    if app.internal_ssl:
+        kwargs['cert'] = (app.internal_ssl_cert, app.internal_ssl_key)
+        kwargs["verify"] = app.internal_ssl_ca
+    r = yield async_requests.get(url, **kwargs)
     assert r.status_code == 200
     assert r.text == spawner.server.base_url
 
-    r = yield async_requests.get(ujoin(url, 'args'))
+    r = yield async_requests.get(ujoin(url, 'args'), **kwargs)
     assert r.status_code == 200
     argv = r.json()
     assert '--port' in ' '.join(argv)
-    r = yield async_requests.get(ujoin(url, 'env'))
+    r = yield async_requests.get(ujoin(url, 'env'), **kwargs)
     env = r.json()
     for expected in ['JUPYTERHUB_USER', 'JUPYTERHUB_BASE_URL', 'JUPYTERHUB_API_TOKEN']:
         assert expected in env
@@ -618,8 +630,11 @@ def test_spawn_handler(app):
 
     # verify that request params got passed down
     # implemented in MockSpawner
+    kwargs = {}
+    if app.external_certs:
+        kwargs['verify'] = app.external_certs['files']['ca']
     url = public_url(app, user)
-    r = yield async_requests.get(ujoin(url, 'env'))
+    r = yield async_requests.get(ujoin(url, 'env'), **kwargs)
     env = r.json()
     assert 'HANDLER_ARGS' in env
     assert env['HANDLER_ARGS'] == 'foo=bar'
@@ -675,7 +690,8 @@ def test_slow_spawn(app, no_patience, slow_spawn):
     assert not app_user.spawner._stop_pending
     assert app_user.spawner is not None
     r = yield api_request(app, 'users', name, 'server', method='delete')
-    assert r.status_code == 400
+    # 204 deleted if there's no such server
+    assert r.status_code == 204
     assert app.users.count_active_users()['pending'] == 0
     assert app.users.count_active_users()['active'] == 0
 
@@ -746,6 +762,8 @@ def test_progress(request, app, no_patience, slow_spawn):
     r = yield api_request(app, 'users', name, 'server/progress', stream=True)
     r.raise_for_status()
     request.addfinalizer(r.close)
+    assert r.headers['content-type'] == 'text/event-stream'
+
     ex = async_requests.executor
     line_iter = iter(r.iter_lines(decode_unicode=True))
     evt = yield ex.submit(next_event, line_iter)
@@ -807,6 +825,7 @@ def test_progress_ready(request, app):
     r = yield api_request(app, 'users', name, 'server/progress', stream=True)
     r.raise_for_status()
     request.addfinalizer(r.close)
+    assert r.headers['content-type'] == 'text/event-stream'
     ex = async_requests.executor
     line_iter = iter(r.iter_lines(decode_unicode=True))
     evt = yield ex.submit(next_event, line_iter)
@@ -826,6 +845,7 @@ def test_progress_bad(request, app, no_patience, bad_spawn):
     r = yield api_request(app, 'users', name, 'server/progress', stream=True)
     r.raise_for_status()
     request.addfinalizer(r.close)
+    assert r.headers['content-type'] == 'text/event-stream'
     ex = async_requests.executor
     line_iter = iter(r.iter_lines(decode_unicode=True))
     evt = yield ex.submit(next_event, line_iter)
@@ -847,6 +867,7 @@ def test_progress_bad_slow(request, app, no_patience, slow_bad_spawn):
     r = yield api_request(app, 'users', name, 'server/progress', stream=True)
     r.raise_for_status()
     request.addfinalizer(r.close)
+    assert r.headers['content-type'] == 'text/event-stream'
     ex = async_requests.executor
     line_iter = iter(r.iter_lines(decode_unicode=True))
     evt = yield ex.submit(next_event, line_iter)
@@ -1214,14 +1235,19 @@ def test_token_as_user_deprecated(app, as_user, for_user, status):
 
 
 @mark.gen_test
-@mark.parametrize("headers, status, note", [
-    ({}, 200, 'test note'),
-    ({}, 200, ''),
-    ({'Authorization': 'token bad'}, 403, ''),
+@mark.parametrize("headers, status, note, expires_in", [
+    ({}, 200, 'test note', None),
+    ({}, 200, '', 100),
+    ({'Authorization': 'token bad'}, 403, '', None),
 ])
-def test_get_new_token(app, headers, status, note):
+def test_get_new_token(app, headers, status, note, expires_in):
+    options = {}
     if note:
-        body = json.dumps({'note': note})
+        options['note'] = note
+    if expires_in:
+        options['expires_in'] = expires_in
+    if options:
+        body = json.dumps(options)
     else:
         body = ''
     # request a new token
@@ -1239,6 +1265,10 @@ def test_get_new_token(app, headers, status, note):
     assert reply['user'] == 'admin'
     assert reply['created']
     assert 'last_activity' in reply
+    if expires_in:
+        assert isinstance(reply['expires_at'], str)
+    else:
+        assert reply['expires_at'] is None
     if note:
         assert reply['note'] == note
     else:
@@ -1597,7 +1627,11 @@ def test_get_service(app, mockservice_url):
 def test_root_api(app):
     base_url = app.hub.url
     url = ujoin(base_url, 'api')
-    r = yield async_requests.get(url)
+    kwargs = {}
+    if app.internal_ssl:
+        kwargs['cert'] = (app.internal_ssl_cert, app.internal_ssl_key)
+        kwargs["verify"] = app.internal_ssl_ca
+    r = yield async_requests.get(url, **kwargs)
     r.raise_for_status()
     expected = {
         'version': jupyterhub.__version__

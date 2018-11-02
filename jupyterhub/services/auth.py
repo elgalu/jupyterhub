@@ -196,6 +196,27 @@ class HubAuth(SingletonConfigurable):
     def _default_login_url(self):
         return self.hub_host + url_path_join(self.hub_prefix, 'login')
 
+    keyfile = Unicode('',
+        help="""The ssl key to use for requests
+
+        Use with certfile
+        """
+    ).tag(config=True)
+
+    certfile = Unicode('',
+        help="""The ssl cert to use for requests
+
+        Use with keyfile
+        """
+    ).tag(config=True)
+
+    client_ca = Unicode('',
+        help="""The ssl certificate authority to use to verify requests
+
+        Use with keyfile and certfile
+        """
+    ).tag(config=True)
+
     cookie_name = Unicode('jupyterhub-services',
         help="""The name of the cookie I should be looking for"""
     ).tag(config=True)
@@ -277,6 +298,10 @@ class HubAuth(SingletonConfigurable):
         allow_404 = kwargs.pop('allow_404', False)
         headers = kwargs.setdefault('headers', {})
         headers.setdefault('Authorization', 'token %s' % self.api_token)
+        if "cert" not in kwargs and self.certfile and self.keyfile:
+            kwargs["cert"] = (self.certfile, self.keyfile)
+            if self.client_ca:
+                kwargs["verify"] = self.client_ca
         try:
             r = requests.request(method, url, **kwargs)
         except requests.ConnectionError as e:
@@ -302,7 +327,15 @@ class HubAuth(SingletonConfigurable):
         elif r.status_code >= 400:
             app_log.warning("Failed to check authorization: [%i] %s", r.status_code, r.reason)
             app_log.warning(r.text)
-            raise HTTPError(500, "Failed to check authorization")
+            msg = "Failed to check authorization"
+            # pass on error_description from oauth failure
+            try:
+                description = r.json().get("error_description")
+            except Exception:
+                pass
+            else:
+                msg += ": " + description
+            raise HTTPError(500, msg)
         else:
             data = r.json()
 
@@ -847,6 +880,11 @@ class HubOAuthCallbackHandler(HubOAuthenticated, RequestHandler):
     
     @coroutine
     def get(self):
+        error = self.get_argument("error", False)
+        if error:
+            msg = self.get_argument("error_description", error)
+            raise HTTPError(400, "Error in oauth: %s" % msg)
+
         code = self.get_argument("code", False)
         if not code:
             raise HTTPError(400, "oauth callback made without a token")

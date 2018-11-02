@@ -12,7 +12,7 @@ from tornado import web, gen
 from tornado.httputil import url_concat
 
 from .. import orm
-from ..utils import admin_only, url_path_join
+from ..utils import admin_only, url_path_join, maybe_future
 from .base import BaseHandler
 
 
@@ -30,7 +30,7 @@ class RootHandler(BaseHandler):
     Otherwise, renders login page.
     """
     def get(self):
-        user = self.get_current_user()
+        user = self.current_user
         if self.default_url:
             url = self.default_url
         elif user:
@@ -45,18 +45,23 @@ class HomeHandler(BaseHandler):
 
     @web.authenticated
     async def get(self):
-        user = self.get_current_user()
+        user = self.current_user
         if user.running:
             # trigger poll_and_notify event in case of a server that died
             await user.spawner.poll_and_notify()
 
-        # send the user to /spawn if they aren't running or pending a spawn,
+        # send the user to /spawn if they have no active servers,
         # to establish that this is an explicit spawn request rather
-        # than an implicit one, which can be caused by any link to `/user/:name`
-        url = user.url if user.spawner.active else url_path_join(self.hub.base_url, 'spawn')
+        # than an implicit one, which can be caused by any link to `/user/:name(/:server_name)`
+        url = url_path_join(self.hub.base_url, 'user', user.name)  if user.active else url_path_join(self.hub.base_url, 'spawn')
         html = self.render_template('home.html',
             user=user,
             url=url,
+            allow_named_servers=self.allow_named_servers,
+            url_path_join=url_path_join,
+            # can't use user.spawners because the stop method of User pops named servers from user.spawners when they're stopped
+            spawners = user.orm_user._orm_spawners,
+            default_server = user.spawner,
         )
         self.finish(html)
 
@@ -87,7 +92,7 @@ class SpawnHandler(BaseHandler):
 
         or triggers spawn via redirect if there is no form.
         """
-        user = current_user = self.get_current_user()
+        user = current_user = self.current_user
         if for_user is not None and for_user != user.name:
             if not user.admin:
                 raise web.HTTPError(403, "Only admins can spawn on behalf of other users")
@@ -102,6 +107,8 @@ class SpawnHandler(BaseHandler):
             self.redirect(url)
             return
         if user.spawner.options_form:
+            # Add handler to spawner here so you can access query params in form rendering.
+            user.spawner.handler = self
             form = await self._render_form(for_user=user)
             self.finish(form)
         else:
@@ -120,7 +127,7 @@ class SpawnHandler(BaseHandler):
     @web.authenticated
     async def post(self, for_user=None):
         """POST spawns with user-specified options"""
-        user = current_user = self.get_current_user()
+        user = current_user = self.current_user
         if for_user is not None and for_user != user.name:
             if not user.admin:
                 raise web.HTTPError(403, "Only admins can spawn on behalf of other users")
@@ -142,7 +149,7 @@ class SpawnHandler(BaseHandler):
         for key, byte_list in self.request.files.items():
             form_options["%s_file"%key] = byte_list
         try:
-            options = user.spawner.options_from_form(form_options)
+            options = await maybe_future(user.spawner.options_from_form(form_options))
             await self.spawn_single_user(user, options=options)
         except Exception as e:
             self.log.error("Failed to spawn single-user server with form", exc_info=True)
@@ -211,14 +218,18 @@ class AdminHandler(BaseHandler):
 
         users = self.db.query(orm.User).outerjoin(orm.Spawner).order_by(*ordered)
         users = [ self._user_from_orm(u) for u in users ]
-        running = [ u for u in users if u.running ]
+        from itertools import chain
+        running = []
+        for u in users:
+            running.extend(s for s in u.spawners.values() if s.active)
 
         html = self.render_template('admin.html',
-            user=self.get_current_user(),
+            current_user=self.current_user,
             admin_access=self.settings.get('admin_access', False),
             users=users,
             running=running,
             sort={s:o for s,o in zip(sorts, orders)},
+            allow_named_servers=self.allow_named_servers,
         )
         self.finish(html)
 
@@ -230,7 +241,7 @@ class TokenPageHandler(BaseHandler):
     def get(self):
         never = datetime(1900, 1, 1)
 
-        user = self.get_current_user()
+        user = self.current_user
         def sort_key(token):
             return (
                 token.last_activity or never,
@@ -247,9 +258,11 @@ class TokenPageHandler(BaseHandler):
             api_tokens.append(token)
 
         # group oauth client tokens by client id
+        # AccessTokens have expires_at as an integer timestamp
+        now_timestamp = now.timestamp()
         oauth_tokens = defaultdict(list)
         for token in user.oauth_tokens:
-            if token.expires_at and token.expires_at < now:
+            if token.expires_at and token.expires_at < now_timestamp:
                 self.log.warning("Deleting expired token")
                 self.db.delete(token)
                 self.db.commit()
@@ -339,6 +352,12 @@ class ProxyErrorHandler(BaseHandler):
         self.write(html)
 
 
+class HealthCheckHandler(BaseHandler):
+    """Answer to health check"""
+    def get(self, *args):
+        self.finish()
+
+
 default_handlers = [
     (r'/', RootHandler),
     (r'/home', HomeHandler),
@@ -347,4 +366,5 @@ default_handlers = [
     (r'/spawn/([^/]+)', SpawnHandler),
     (r'/token', TokenPageHandler),
     (r'/error/(\d+)', ProxyErrorHandler),
+    (r'/health$', HealthCheckHandler),
 ]

@@ -10,6 +10,7 @@ and a custom Spawner needs to be able to take three actions:
 
 
 ## Examples
+
 Custom Spawners for JupyterHub can be found on the [JupyterHub wiki](https://github.com/jupyterhub/jupyterhub/wiki/Spawners).
 Some examples include:
 
@@ -174,6 +175,42 @@ When `Spawner.start` is called, this dictionary is accessible as `self.user_opti
 
 If you are interested in building a custom spawner, you can read [this tutorial](http://jupyterhub-tutorial.readthedocs.io/en/latest/spawners.html).
 
+### Registering custom Spawners via entry points
+
+As of JupyterHub 1.0, custom Spawners can register themselves via
+the `jupyterhub.spawners` entry point metadata.
+To do this, in your `setup.py` add:
+
+```python
+setup(
+  ...
+  entry_points={
+    'jupyterhub.spawners': [
+        'myservice = mypackage:MySpawner',
+    ],
+  },
+)
+```
+
+If you have added this metadata to your package,
+users can select your authenticator with the configuration:
+
+```python
+c.JupyterHub.spawner_class = 'myservice'
+```
+
+instead of the full
+
+```python
+c.JupyterHub.spawner_class = 'mypackage:MySpawner'
+```
+
+previously required.
+Additionally, configurable attributes for your spawner will
+appear in jupyterhub help output and auto-generated configuration files
+via `jupyterhub --generate-config`.
+
+
 ## Spawners, resource limits, and guarantees (Optional)
 
 Some spawners of the single-user notebook servers allow setting limits or
@@ -223,3 +260,30 @@ in the single-user notebook server when a guarantee is being provided.
 **The spawner's underlying system or cluster is responsible for enforcing these
 limits and providing these guarantees.** If these values are set to `None`, no
 limits or guarantees are provided, and no environment values are set.
+
+### Encryption
+
+Communication between the `Proxy`, `Hub`, and `Notebook` can be secured by
+turning on `internal_ssl` in `jupyterhub_config.py`. For a custom spawner to
+utilize these certs, there are two methods of interest on the base `Spawner`
+class: `.create_certs` and `.move_certs`.
+
+The first method, `.create_certs` will sign a key-cert pair using an internally
+trusted authority for notebooks.  During this process, `.create_certs` can
+apply `ip` and `dns` name information to the cert via an `alt_names` `kwarg`.
+This is used for certificate authentication (verification). Without proper
+verification, the `Notebook` will be unable to communicate with the `Hub` and
+vice versa when `internal_ssl` is enabled. For example, given a deployment
+using the `DockerSpawner` which will start containers with `ips` from the
+`docker` subnet pool, the `DockerSpawner` would need to instead choose a
+container `ip` prior to starting and pass that to `.create_certs` (TODO: edit).
+
+In general though, this method will not need to be changed and the default
+`ip`/`dns` (localhost) info will suffice.
+
+When `.create_certs` is run, it will `.create_certs` in a default, central
+location specified by `c.JupyterHub.internal_certs_location`. For `Spawners`
+that need access to these certs elsewhere (i.e. on another host altogether),
+the `.move_certs` method can be overridden to move the certs appropriately.
+Again, using `DockerSpawner` as an example, this would entail moving certs
+to a directory that will get mounted into the container this spawner starts.

@@ -6,18 +6,18 @@ from datetime import datetime, timedelta
 from urllib.parse import quote, urlparse
 import warnings
 
-from oauth2.error import ClientNotFoundError
 from sqlalchemy import inspect
 from tornado import gen
 from tornado.log import app_log
 
-from .utils import maybe_future, url_path_join
+from .utils import maybe_future, url_path_join, make_ssl_context
 
 from . import orm
 from ._version import _check_version, __version__
 from .objects import Server
 from .spawner import LocalProcessSpawner
 from .crypto import encrypt, decrypt, CryptKeeper, EncryptionUnavailable, InvalidToken
+from .metrics import TOTAL_USERS
 
 class UserDict(dict):
     """Like defaultdict, but for users
@@ -40,6 +40,7 @@ class UserDict(dict):
         """Add a user to the UserDict"""
         if orm_user.id not in self:
             self[orm_user.id] = self.from_orm(orm_user)
+            TOTAL_USERS.inc()
         return self[orm_user.id]
 
     def __contains__(self, key):
@@ -94,6 +95,7 @@ class UserDict(dict):
         self.db.delete(user)
         self.db.commit()
         # delete from dict after commit
+        TOTAL_USERS.dec()
         del self[user_id]
 
     def count_active_users(self):
@@ -183,19 +185,41 @@ class User:
                 await self.save_auth_state(auth_state)
         return auth_state
 
-    def _new_spawner(self, name, spawner_class=None, **kwargs):
+
+    def all_spawners(self, include_default=True):
+        """Generator yielding all my spawners
+
+        including those that are not running.
+
+        Spawners that aren't running will be low-level orm.Spawner objects,
+        while those that are will be higher-level Spawner wrapper objects.
+        """
+
+        for name, orm_spawner in sorted(self.orm_user.orm_spawners.items()):
+            if name == '' and not include_default:
+                continue
+            if name and not self.allow_named_servers:
+                continue
+            if name in self.spawners:
+                # yield wrapper if it exists (server may be active)
+                yield self.spawners[name]
+            else:
+                # otherwise, yield low-level ORM object (server is not active)
+                yield orm_spawner
+
+    def _new_spawner(self, server_name, spawner_class=None, **kwargs):
         """Create a new spawner"""
         if spawner_class is None:
             spawner_class = self.spawner_class
-        self.log.debug("Creating %s for %s:%s", spawner_class, self.name, name)
+        self.log.debug("Creating %s for %s:%s", spawner_class, self.name, server_name)
 
-        orm_spawner = self.orm_spawners.get(name)
+        orm_spawner = self.orm_spawners.get(server_name)
         if orm_spawner is None:
-            orm_spawner = orm.Spawner(user=self.orm_user, name=name)
+            orm_spawner = orm.Spawner(user=self.orm_user, name=server_name)
             self.db.add(orm_spawner)
             self.db.commit()
-            assert name in self.orm_spawners
-        if name == '' and self.state:
+            assert server_name in self.orm_spawners
+        if server_name == '' and self.state:
             # migrate user.state to spawner.state
             orm_spawner.state = self.state
             self.state = None
@@ -203,19 +227,37 @@ class User:
         # use fully quoted name for client_id because it will be used in cookie-name
         # self.escaped_name may contain @ which is legal in URLs but not cookie keys
         client_id = 'jupyterhub-user-%s' % quote(self.name)
-        if name:
-            client_id = '%s-%s' % (client_id, quote(name))
+        if server_name:
+            client_id = '%s-%s' % (client_id, quote(server_name))
+
+        trusted_alt_names = []
+        trusted_alt_names.extend(self.settings.get('trusted_alt_names', []))
+        if self.settings.get('subdomain_host'):
+            trusted_alt_names.append('DNS:' + self.domain)
+
         spawn_kwargs = dict(
             user=self,
             orm_spawner=orm_spawner,
             hub=self.settings.get('hub'),
             authenticator=self.authenticator,
             config=self.settings.get('config'),
-            proxy_spec=url_path_join(self.proxy_spec, name, '/'),
+            proxy_spec=url_path_join(self.proxy_spec, server_name, '/'),
             db=self.db,
             oauth_client_id=client_id,
             cookie_options = self.settings.get('cookie_options', {}),
+            trusted_alt_names=trusted_alt_names,
         )
+
+        if self.settings.get('internal_ssl'):
+            ssl_kwargs = dict(
+                internal_ssl=self.settings.get('internal_ssl'),
+                internal_trust_bundles=self.settings.get(
+                    'internal_trust_bundles'),
+                internal_certs_location=self.settings.get(
+                    'internal_certs_location'),
+            )
+            spawn_kwargs.update(ssl_kwargs)
+
         # update with kwargs. Mainly for testing.
         spawn_kwargs.update(kwargs)
         spawner = spawner_class(**spawn_kwargs)
@@ -322,6 +364,13 @@ class User:
         else:
             return self.base_url
 
+    def server_url(self, server_name=''):
+        """Get the url for a server with a given name"""
+        if not server_name:
+            return self.url
+        else:
+            return url_path_join(self.url, server_name)
+
     def progress_url(self, server_name=''):
         """API URL for progress endpoint for a server with a given name"""
         url_parts = [self.settings['hub'].base_url, 'api/users', self.escaped_name]
@@ -375,17 +424,14 @@ class User:
         client_id = spawner.oauth_client_id
         oauth_provider = self.settings.get('oauth_provider')
         if oauth_provider:
-            client_store = oauth_provider.client_authenticator.client_store
-            try:
-                oauth_client = client_store.fetch_by_client_id(client_id)
-            except ClientNotFoundError:
-                oauth_client = None
+            oauth_client = oauth_provider.fetch_by_client_id(client_id)
             # create a new OAuth client + secret on every launch
             # containers that resume will be updated below
-            client_store.add_client(client_id, api_token,
-                                    url_path_join(self.url, server_name, 'oauth_callback'),
-                                    description="Server at %s" % (url_path_join(self.base_url, server_name) + '/'),
-                                    )
+            oauth_provider.add_client(
+                client_id, api_token,
+                url_path_join(self.url, server_name, 'oauth_callback'),
+                description="Server at %s" % (url_path_join(self.base_url, server_name) + '/'),
+            )
         db.commit()
 
         # trigger pre-spawn hook on authenticator
@@ -403,6 +449,11 @@ class User:
         try:
             # run optional preparation work to bootstrap the notebook
             await maybe_future(spawner.run_pre_spawn_hook())
+            if self.settings.get('internal_ssl'):
+                self.log.debug("Creating internal SSL certs for %s", spawner._log_name)
+                hub_paths = await maybe_future(spawner.create_certs())
+                spawner.cert_paths = await maybe_future(spawner.move_certs(hub_paths))
+            self.log.debug("Calling Spawner.start for %s", spawner._log_name)
             f = maybe_future(spawner.start())
             # commit any changes in spawner.start (always commit db changes before yield)
             db.commit()
@@ -414,7 +465,8 @@ class User:
                     pass
                 else:
                     # >= 0.7 returns (ip, port)
-                    url = 'http://%s:%i' % url
+                    proto = 'https' if self.settings['internal_ssl'] else 'http'
+                    url = '%s://%s:%i' % ((proto,) + url)
                 urlinfo = urlparse(url)
                 server.proto = urlinfo.scheme
                 server.ip = urlinfo.hostname
@@ -459,10 +511,10 @@ class User:
                     )
                 # update OAuth client secret with updated API token
                 if oauth_provider:
-                    client_store = oauth_provider.client_authenticator.client_store
-                    client_store.add_client(client_id, spawner.api_token,
-                                            url_path_join(self.url, server_name, 'oauth_callback'),
-                                            )
+                    oauth_provider.add_client(
+                        client_id, spawner.api_token,
+                        url_path_join(self.url, server_name, 'oauth_callback'),
+                    )
                     db.commit()
 
         except Exception as e:
@@ -498,8 +550,15 @@ class User:
         spawner.orm_spawner.state = spawner.get_state()
         db.commit()
         spawner._waiting_for_response = True
+        key = self.settings.get('internal_ssl_key')
+        cert = self.settings.get('internal_ssl_cert')
+        ca = self.settings.get('internal_ssl_ca')
+        ssl_context = make_ssl_context(key, cert, cafile=ca)
         try:
-            resp = await server.wait_up(http=True, timeout=spawner.http_timeout)
+            resp = await server.wait_up(
+                    http=True,
+                    timeout=spawner.http_timeout,
+                    ssl_context=ssl_context)
         except Exception as e:
             if isinstance(e, TimeoutError):
                 self.log.warning(
@@ -558,11 +617,25 @@ class User:
             # remove server entry from db
             spawner.server = None
             if not spawner.will_resume:
-                # find and remove the API token if the spawner isn't
+                # find and remove the API token and oauth client if the spawner isn't
                 # going to re-use it next time
                 orm_token = orm.APIToken.find(self.db, api_token)
                 if orm_token:
                     self.db.delete(orm_token)
+                # remove oauth client as well
+                # handle upgrades from 0.8, where client id will be `user-USERNAME`,
+                # not just `jupyterhub-user-USERNAME`
+                client_ids = (
+                    spawner.oauth_client_id,
+                    spawner.oauth_client_id.split('-', 1)[1],
+                )
+                for oauth_client in (
+                    self.db
+                        .query(orm.OAuthClient)
+                        .filter(orm.OAuthClient.identifier.in_(client_ids))
+                ):
+                    self.log.debug("Deleting oauth client %s", oauth_client.identifier)
+                    self.db.delete(oauth_client)
             self.db.commit()
         finally:
             spawner.orm_spawner.started = None
