@@ -8,6 +8,12 @@ for a friendly and welcoming collaborative environment.
 
 ## Setting up a development environment
 
+<!--
+https://jupyterhub.readthedocs.io/en/stable/contributing/setup.html
+contains a lot of the same information. Should we merge the docs and
+just have this page link to that one?
+-->
+
 JupyterHub requires Python >= 3.5 and nodejs.
 
 As a Python project, a development install of JupyterHub follows standard practices for the basics (steps 1-2).
@@ -60,7 +66,7 @@ pre-commit run
 
 which should run any autoformatting on your code
 and tell you about any errors it couldn't fix automatically.
-You may also install [black integration](https://github.com/ambv/black#editor-integration)
+You may also install [black integration](https://github.com/psf/black#editor-integration)
 into your text editor to format code automatically.
 
 If you have already committed files before setting up the pre-commit
@@ -128,4 +134,4 @@ To read more about fixtures check out the
 [pytest docs](https://docs.pytest.org/en/latest/fixture.html)
 for how to use the existing fixtures, and how to create new ones.
 
-When in doubt, feel free to ask.
+When in doubt, feel free to [ask](https://gitter.im/jupyterhub/jupyterhub).

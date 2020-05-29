@@ -316,7 +316,7 @@ class JupyterHub(Application):
 
     @validate("config_file")
     def _validate_config_file(self, proposal):
-        if not os.path.isfile(proposal.value):
+        if not self.generate_config and not os.path.isfile(proposal.value):
             print(
                 "ERROR: Failed to find specified config file: {}".format(
                     proposal.value
@@ -561,7 +561,11 @@ class JupyterHub(Application):
     def _url_part_changed(self, change):
         """propagate deprecated ip/port/base_url config to the bind_url"""
         urlinfo = urlparse(self.bind_url)
-        urlinfo = urlinfo._replace(netloc='%s:%i' % (self.ip, self.port))
+        if ':' in self.ip:
+            fmt = '[%s]:%i'
+        else:
+            fmt = '%s:%i'
+        urlinfo = urlinfo._replace(netloc=fmt % (self.ip, self.port))
         urlinfo = urlinfo._replace(path=self.base_url)
         bind_url = urlunparse(urlinfo)
         if bind_url != self.bind_url:
@@ -575,6 +579,22 @@ class JupyterHub(Application):
         Sets protocol, ip, base_url
         """,
     ).tag(config=True)
+
+    @validate('bind_url')
+    def _validate_bind_url(self, proposal):
+        """ensure protocol field of bind_url matches ssl"""
+        v = proposal['value']
+        proto, sep, rest = v.partition('://')
+        if self.ssl_cert and proto != 'https':
+            return 'https' + sep + rest
+        elif proto != 'http' and not self.ssl_cert:
+            return 'http' + sep + rest
+        return v
+
+    @default('bind_url')
+    def _bind_url_default(self):
+        proto = 'https' if self.ssl_cert else 'http'
+        return proto + '://:8000'
 
     subdomain_host = Unicode(
         '',
@@ -711,10 +731,10 @@ class JupyterHub(Application):
         help="""The ip or hostname for proxies and spawners to use
         for connecting to the Hub.
 
-        Use when the bind address (`hub_ip`) is 0.0.0.0 or otherwise different
+        Use when the bind address (`hub_ip`) is 0.0.0.0, :: or otherwise different
         from the connect address.
 
-        Default: when `hub_ip` is 0.0.0.0, use `socket.gethostname()`, otherwise use `hub_ip`.
+        Default: when `hub_ip` is 0.0.0.0 or ::, use `socket.gethostname()`, otherwise use `hub_ip`.
 
         Note: Some spawners or proxy implementations might not support hostnames. Check your
         spawner or proxy documentation to see if they have extra requirements.
@@ -916,6 +936,25 @@ class JupyterHub(Application):
     @default('authenticator')
     def _authenticator_default(self):
         return self.authenticator_class(parent=self, db=self.db)
+
+    implicit_spawn_seconds = Float(
+        0,
+        help="""Trigger implicit spawns after this many seconds.
+
+        When a user visits a URL for a server that's not running,
+        they are shown a page indicating that the requested server
+        is not running with a button to spawn the server.
+
+        Setting this to a positive value will redirect the user
+        after this many seconds, effectively clicking this button
+        automatically for the users,
+        automatically beginning the spawn process.
+
+        Warning: this can result in errors and surprising behavior
+        when sharing access URLs to actual servers,
+        since the wrong server is likely to be started.
+        """,
+    ).tag(config=True)
 
     allow_named_servers = Bool(
         False, help="Allow named single-user servers per user"
@@ -1670,9 +1709,12 @@ class JupyterHub(Application):
         # This lets whitelist be used to set up initial list,
         # but changes to the whitelist can occur in the database,
         # and persist across sessions.
+        total_users = 0
         for user in db.query(orm.User):
             try:
-                await maybe_future(self.authenticator.add_user(user))
+                f = self.authenticator.add_user(user)
+                if f:
+                    await maybe_future(f)
             except Exception:
                 self.log.exception("Error adding user %s already in db", user.name)
                 if self.authenticator.delete_invalid_users:
@@ -1694,6 +1736,7 @@ class JupyterHub(Application):
                         )
                     )
             else:
+                total_users += 1
                 # handle database upgrades where user.created is undefined.
                 # we don't want to allow user.created to be undefined,
                 # so initialize it to last_activity (if defined) or now.
@@ -1704,6 +1747,8 @@ class JupyterHub(Application):
         # The whitelist set and the users in the db are now the same.
         # From this point on, any user changes should be done simultaneously
         # to the whitelist set and user db, unless the whitelist is empty (all users allowed).
+
+        TOTAL_USERS.set(total_users)
 
     async def init_groups(self):
         """Load predefined groups into the database"""
@@ -2005,21 +2050,30 @@ class JupyterHub(Application):
             spawner._check_pending = False
 
         # parallelize checks for running Spawners
+        # run query on extant Server objects
+        # so this is O(running servers) not O(total users)
+        # Server objects can be associated with either a Spawner or a Service,
+        # we are only interested in the ones associated with a Spawner
         check_futures = []
-        for orm_user in db.query(orm.User):
-            user = self.users[orm_user]
-            self.log.debug("Loading state for %s from db", user.name)
-            for name, orm_spawner in user.orm_spawners.items():
-                if orm_spawner.server is not None:
-                    # spawner should be running
-                    # instantiate Spawner wrapper and check if it's still alive
-                    spawner = user.spawners[name]
-                    # signal that check is pending to avoid race conditions
-                    spawner._check_pending = True
-                    f = asyncio.ensure_future(check_spawner(user, name, spawner))
-                    check_futures.append(f)
-
-        TOTAL_USERS.set(len(self.users))
+        for orm_server in db.query(orm.Server):
+            orm_spawner = orm_server.spawner
+            if not orm_spawner:
+                # check for orphaned Server rows
+                # this shouldn't happen if we've got our sqlachemy right
+                if not orm_server.service:
+                    self.log.warning("deleting orphaned server %s", orm_server)
+                    self.db.delete(orm_server)
+                    self.db.commit()
+                continue
+            # instantiate Spawner wrapper and check if it's still alive
+            # spawner should be running
+            user = self.users[orm_spawner.user]
+            spawner = user.spawners[orm_spawner.name]
+            self.log.debug("Loading state for %s from db", spawner._log_name)
+            # signal that check is pending to avoid race conditions
+            spawner._check_pending = True
+            f = asyncio.ensure_future(check_spawner(user, spawner.name, spawner))
+            check_futures.append(f)
 
         # it's important that we get here before the first await
         # so that we know all spawners are instantiated and in the check-pending state
@@ -2158,6 +2212,7 @@ class JupyterHub(Application):
             subdomain_host=self.subdomain_host,
             domain=self.domain,
             statsd=self.statsd,
+            implicit_spawn_seconds=self.implicit_spawn_seconds,
             allow_named_servers=self.allow_named_servers,
             default_server_name=self._default_server_name,
             named_server_limit_per_user=self.named_server_limit_per_user,
@@ -2452,7 +2507,7 @@ class JupyterHub(Application):
                 continue
             dt = parse_date(route_data['last_activity'])
             if dt.tzinfo:
-                # strip timezone info to naïve UTC datetime
+                # strip timezone info to naive UTC datetime
                 dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
 
             if user.last_activity:

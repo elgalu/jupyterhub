@@ -83,8 +83,11 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 
         # websocket headers
+        proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
+
+        proxy_buffering off;
     }
 
     # Managing requests to verify letsencrypt host

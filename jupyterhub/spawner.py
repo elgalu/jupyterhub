@@ -16,6 +16,8 @@ import warnings
 from subprocess import Popen
 from tempfile import mkdtemp
 
+if os.name == 'nt':
+    import psutil
 from async_generator import async_generator
 from async_generator import yield_
 from sqlalchemy import inspect
@@ -381,6 +383,37 @@ class Spawner(LoggingConfigurable):
             if the user_options are re-used.
         """
         return form_data
+
+    def options_from_query(self, query_data):
+        """Interpret query arguments passed to /spawn
+
+        Query arguments will always arrive as a dict of unicode strings.
+        Override this function to understand single-values, numbers, etc.
+
+        By default, options_from_form is called from this function. You can however override
+        this function if you need to process the query arguments differently.
+
+        This should coerce form data into the structure expected by self.user_options,
+        which must be a dict, and should be JSON-serializeable,
+        though it can contain bytes in addition to standard JSON data types.
+
+        This method should not have any side effects.
+        Any handling of `user_options` should be done in `.start()`
+        to ensure consistent behavior across servers
+        spawned via the API and form submission page.
+
+        Instances will receive this data on self.user_options, after passing through this function,
+        prior to `Spawner.start`.
+
+        .. versionadded:: 1.2
+            user_options are persisted in the JupyterHub database to be reused
+            on subsequent spawns if no options are given.
+            user_options is serialized to JSON as part of this persistence
+            (with additional support for bytes in case of uploaded file data),
+            and any non-bytes non-jsonable values will be replaced with None
+            if the user_options are re-used.
+        """
+        return self.options_from_form(query_data)
 
     user_options = Dict(
         help="""
@@ -972,11 +1005,11 @@ class Spawner(LoggingConfigurable):
             except Exception:
                 self.log.exception("post_stop_hook failed with exception: %s", self)
 
-    def run_auth_state_hook(self, auth_state):
+    async def run_auth_state_hook(self, auth_state):
         """Run the auth_state_hook if defined"""
         if self.auth_state_hook is not None:
             try:
-                return self.auth_state_hook(self, auth_state)
+                await maybe_future(self.auth_state_hook(self, auth_state))
             except Exception:
                 self.log.exception("auth_stop_hook failed with exception: %s", self)
 
@@ -1468,9 +1501,11 @@ class LocalProcessSpawner(Spawner):
             self.clear_state()
             return 0
 
-        # send signal 0 to check if PID exists
-        # this doesn't work on Windows, but that's okay because we don't support Windows.
-        alive = await self._signal(0)
+        # We use pustil.pid_exists on windows
+        if os.name == 'nt':
+            alive = psutil.pid_exists(self.pid)
+        else:
+            alive = await self._signal(0)
         if not alive:
             self.clear_state()
             return 0
@@ -1486,11 +1521,10 @@ class LocalProcessSpawner(Spawner):
         """
         try:
             os.kill(self.pid, sig)
+        except ProcessLookupError:
+            return False  # process is gone
         except OSError as e:
-            if e.errno == errno.ESRCH:
-                return False  # process is gone
-            else:
-                raise
+            raise  # Can be EPERM or EINVAL
         return True  # process exists
 
     async def stop(self, now=False):

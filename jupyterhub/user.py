@@ -389,14 +389,9 @@ class User:
         Full name.domain/path if using subdomains, otherwise just my /base/url
         """
         if self.settings.get('subdomain_host'):
-            url = '{host}{path}'.format(host=self.host, path=self.base_url)
+            return '{host}{path}'.format(host=self.host, path=self.base_url)
         else:
-            url = self.base_url
-
-        if self.settings.get('default_server_name'):
-            return url_path_join(url, self.settings.get('default_server_name'))
-        else:
-            return url
+            return self.base_url
 
     def server_url(self, server_name=''):
         """Get the url for a server with a given name"""
@@ -535,12 +530,17 @@ class User:
         # trigger pre-spawn hook on authenticator
         authenticator = self.authenticator
         try:
+            spawner._start_pending = True
+
             if authenticator:
                 # pre_spawn_start can thow errors that can lead to a redirect loop
                 # if left uncaught (see https://github.com/jupyterhub/jupyterhub/issues/2683)
                 await maybe_future(authenticator.pre_spawn_start(self, spawner))
 
-            spawner._start_pending = True
+            # trigger auth_state hook
+            auth_state = await self.get_auth_state()
+            await spawner.run_auth_state_hook(auth_state)
+
             # update spawner start time, and activity for both spawner and user
             self.last_activity = (
                 spawner.orm_spawner.started
@@ -566,7 +566,12 @@ class User:
                 else:
                     # >= 0.7 returns (ip, port)
                     proto = 'https' if self.settings['internal_ssl'] else 'http'
-                    url = '%s://%s:%i' % ((proto,) + url)
+
+                    # check if spawner returned an IPv6 address
+                    if ':' in url[0]:
+                        url = '%s://[%s]:%i' % ((proto,) + url)
+                    else:
+                        url = '%s://%s:%i' % ((proto,) + url)
                 urlinfo = urlparse(url)
                 server.proto = urlinfo.scheme
                 server.ip = urlinfo.hostname
