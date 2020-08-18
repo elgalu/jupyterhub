@@ -1689,22 +1689,22 @@ class JupyterHub(Application):
         # the admin_users config variable will never be used after this point.
         # only the database values will be referenced.
 
-        whitelist = [
+        allowed_users = [
             self.authenticator.normalize_username(name)
-            for name in self.authenticator.whitelist
+            for name in self.authenticator.allowed_users
         ]
-        self.authenticator.whitelist = set(whitelist)  # force normalization
-        for username in whitelist:
+        self.authenticator.allowed_users = set(allowed_users)  # force normalization
+        for username in allowed_users:
             if not self.authenticator.validate_username(username):
                 raise ValueError("username %r is not valid" % username)
 
-        if not whitelist:
+        if not allowed_users:
             self.log.info(
-                "Not using whitelist. Any authenticated user will be allowed."
+                "Not using allowed_users. Any authenticated user will be allowed."
             )
 
-        # add whitelisted users to the db
-        for name in whitelist:
+        # add allowed users to the db
+        for name in allowed_users:
             user = orm.User.find(db, name)
             if user is None:
                 user = orm.User(name=name)
@@ -1714,9 +1714,9 @@ class JupyterHub(Application):
         db.commit()
 
         # Notify authenticator of all users.
-        # This ensures Auth whitelist is up-to-date with the database.
-        # This lets whitelist be used to set up initial list,
-        # but changes to the whitelist can occur in the database,
+        # This ensures Authenticator.allowed_users is up-to-date with the database.
+        # This lets .allowed_users be used to set up initial list,
+        # but changes to the allowed_users set can occur in the database,
         # and persist across sessions.
         total_users = 0
         for user in db.query(orm.User):
@@ -1753,9 +1753,9 @@ class JupyterHub(Application):
                     user.created = user.last_activity or datetime.utcnow()
         db.commit()
 
-        # The whitelist set and the users in the db are now the same.
+        # The allowed_users set and the users in the db are now the same.
         # From this point on, any user changes should be done simultaneously
-        # to the whitelist set and user db, unless the whitelist is empty (all users allowed).
+        # to the allowed_users set and user db, unless the allowed set is empty (all users allowed).
 
         TOTAL_USERS.set(total_users)
 
@@ -1770,11 +1770,11 @@ class JupyterHub(Application):
             for username in usernames:
                 username = self.authenticator.normalize_username(username)
                 if not (
-                    await maybe_future(
-                        self.authenticator.check_whitelist(username, None)
-                    )
+                    await maybe_future(self.authenticator.check_allowed(username, None))
                 ):
-                    raise ValueError("Username %r is not in whitelist" % username)
+                    raise ValueError(
+                        "Username %r is not in Authenticator.allowed_users" % username
+                    )
                 user = orm.User.find(db, name=username)
                 if user is None:
                     if not self.authenticator.validate_username(username):
@@ -1798,11 +1798,14 @@ class JupyterHub(Application):
             if kind == 'user':
                 name = self.authenticator.normalize_username(name)
                 if not (
-                    await maybe_future(self.authenticator.check_whitelist(name, None))
+                    await maybe_future(self.authenticator.check_allowed(name, None))
                 ):
-                    raise ValueError("Token name %r is not in whitelist" % name)
+                    raise ValueError(
+                        "Token user name %r is not in Authenticator.allowed_users"
+                        % name
+                    )
                 if not self.authenticator.validate_username(name):
-                    raise ValueError("Token name %r is not valid" % name)
+                    raise ValueError("Token user name %r is not valid" % name)
             if kind == 'service':
                 if not any(service["name"] == name for service in self.services):
                     self.log.warning(
@@ -2183,14 +2186,14 @@ class JupyterHub(Application):
         else:
             version_hash = datetime.now().strftime("%Y%m%d%H%M%S")
 
-        oauth_no_confirm_whitelist = set()
+        oauth_no_confirm_list = set()
         for service in self._service_map.values():
             if service.oauth_no_confirm:
                 self.log.warning(
                     "Allowing service %s to complete OAuth without confirmation on an authorization web page",
                     service.name,
                 )
-                oauth_no_confirm_whitelist.add(service.oauth_client_id)
+                oauth_no_confirm_list.add(service.oauth_client_id)
 
         settings = dict(
             log_function=log_request,
@@ -2226,7 +2229,7 @@ class JupyterHub(Application):
             default_server_name=self._default_server_name,
             named_server_limit_per_user=self.named_server_limit_per_user,
             oauth_provider=self.oauth_provider,
-            oauth_no_confirm_whitelist=oauth_no_confirm_whitelist,
+            oauth_no_confirm_list=oauth_no_confirm_list,
             concurrent_spawn_limit=self.concurrent_spawn_limit,
             spawn_throttle_retry_range=self.spawn_throttle_retry_range,
             active_server_limit=self.active_server_limit,
@@ -2360,7 +2363,6 @@ class JupyterHub(Application):
         if init_spawners_timeout < 0:
             # negative timeout means forever (previous, most stable behavior)
             init_spawners_timeout = 86400
-        print(init_spawners_timeout)
 
         init_start_time = time.perf_counter()
         init_spawners_future = asyncio.ensure_future(self.init_spawners())
@@ -2729,6 +2731,40 @@ class JupyterHub(Application):
         self.log.critical("Received signalnum %s, , initiating shutdown...", signum)
         raise SystemExit(128 + signum)
 
+    def _init_asyncio_patch(self):
+        """Set default asyncio policy to be compatible with Tornado.
+
+        Tornado 6 (at least) is not compatible with the default
+        asyncio implementation on Windows.
+
+        Pick the older SelectorEventLoopPolicy on Windows
+        if the known-incompatible default policy is in use.
+
+        Do this as early as possible to make it a low priority and overrideable.
+
+        ref: https://github.com/tornadoweb/tornado/issues/2608
+
+        FIXME: If/when tornado supports the defaults in asyncio,
+               remove and bump tornado requirement for py38.
+        """
+        if sys.platform.startswith("win") and sys.version_info >= (3, 8):
+            try:
+                from asyncio import (
+                    WindowsProactorEventLoopPolicy,
+                    WindowsSelectorEventLoopPolicy,
+                )
+            except ImportError:
+                pass
+                # not affected
+            else:
+                if (
+                    type(asyncio.get_event_loop_policy())
+                    is WindowsProactorEventLoopPolicy
+                ):
+                    # WindowsProactorEventLoopPolicy is not compatible with Tornado 6.
+                    # Fallback to the pre-3.8 default of WindowsSelectorEventLoopPolicy.
+                    asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())
+
     _atexit_ran = False
 
     def atexit(self):
@@ -2736,6 +2772,7 @@ class JupyterHub(Application):
         if self._atexit_ran:
             return
         self._atexit_ran = True
+        self._init_asyncio_patch()
         # run the cleanup step (in a new loop, because the interrupted one is unclean)
         asyncio.set_event_loop(asyncio.new_event_loop())
         IOLoop.clear_current()
@@ -2785,6 +2822,7 @@ class JupyterHub(Application):
     @classmethod
     def launch_instance(cls, argv=None):
         self = cls.instance()
+        self._init_asyncio_patch()
         loop = IOLoop.current()
         task = asyncio.ensure_future(self.launch_instance_async(argv))
         try:
