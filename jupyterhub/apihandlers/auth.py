@@ -277,9 +277,9 @@ class OAuthAuthorizeHandler(OAuthHandler, BaseHandler):
         # trim protocol, which cannot be trusted with multiple layers of proxies anyway
         # Referer is set by browser, but full_url can be modified by proxy layers to appear as http
         # when it is actually https
-        referer_proto, _, stripped_referer = referer.partition("://")[2]
+        referer_proto, _, stripped_referer = referer.partition("://")
         referer_proto = referer_proto.lower()
-        req_proto, _, stripped_full_url = full_url.partition("://")[2]
+        req_proto, _, stripped_full_url = full_url.partition("://")
         req_proto = req_proto.lower()
         if referer_proto != req_proto:
             self.log.warning("Protocol mismatch: %s != %s", referer, full_url)
