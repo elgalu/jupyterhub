@@ -8,8 +8,8 @@ class Pagination:
     _page_name = 'page'
     _per_page_name = 'per_page'
     _default_page = 1
-    _default_per_page = 100
-    _max_per_page = 250
+    _default_per_page = 1000
+    _max_per_page = 2500
 
     def __init__(self, *args, **kwargs):
         """Potential parameters.
