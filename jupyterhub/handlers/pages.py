@@ -119,7 +119,7 @@ class SpawnHandler(BaseHandler):
         if for_user is not None and for_user != user.name:
             if not user.admin:
                 if for_user.startswith('team-'):
-                    # TODO: and user belongs to that team
+                    self.log.info("TODO: and user belongs to that team")
                 else:
                     raise web.HTTPError(
                         403, "Only admins can spawn on behalf of other users / or team members can spawn teams"
@@ -231,7 +231,7 @@ class SpawnHandler(BaseHandler):
         if for_user is not None and for_user != user.name:
             if not user.admin:
                 if for_user.startswith('team-'):
-                    # TODO: and user belongs to that team
+                    self.log.info("TODO: and user belongs to that team")
                 else:
                     raise web.HTTPError(
                         403, "Only admins can spawn on behalf of other users / or team members can spawn teams"
@@ -349,7 +349,7 @@ class SpawnPendingHandler(BaseHandler):
         if for_user is not None and for_user != current_user.name:
             if not current_user.admin:
                 if for_user.startswith('team-'):
-                    # TODO: and user belongs to that team
+                    self.log.info("TODO: and user belongs to that team")
                 else:
                     raise web.HTTPError(
                         403, "Only admins can spawn on behalf of other users / or team members can spawn teams"
