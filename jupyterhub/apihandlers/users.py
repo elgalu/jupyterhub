@@ -159,13 +159,17 @@ class UserListAPIHandler(APIHandler):
 
 
 def admin_or_self(method):
-    """Decorator for restricting access to either the target user or admin"""
+    """Decorator for restricting access to either the target user or admin
+       or team member
+    """
 
     def m(self, name, *args, **kwargs):
         current = self.current_user
         if current is None:
             raise web.HTTPError(403)
-        if not (current.name == name or current.admin):
+        # TODO: and user belongs to that team
+        if not (current.name == name or current.admin or
+                name.startswith('team-')):
             raise web.HTTPError(403)
 
         # raise 404 if not found
