@@ -883,7 +883,7 @@ class HubAuthenticated(object):
             # group in allowed list
             return model
         else:
-            app_log.inf("model=%s", model)
+            app_log.info("model=%s", model)
             app_log.warning("Not allowing Hub user %s", name)
             raise UserNotAllowed(model)
 
