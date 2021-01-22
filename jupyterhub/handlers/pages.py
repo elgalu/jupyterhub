@@ -118,9 +118,12 @@ class SpawnHandler(BaseHandler):
         user = current_user = self.current_user
         if for_user is not None and for_user != user.name:
             if not user.admin:
-                raise web.HTTPError(
-                    403, "Only admins can spawn on behalf of other users"
-                )
+                if for_user.startswith('team-'):
+                    # TODO: and user belongs to that team
+                else:
+                    raise web.HTTPError(
+                        403, "Only admins can spawn on behalf of other users / or team members can spawn teams"
+                    )
 
             user = self.find_user(for_user)
             if user is None:
@@ -227,9 +230,13 @@ class SpawnHandler(BaseHandler):
         user = current_user = self.current_user
         if for_user is not None and for_user != user.name:
             if not user.admin:
-                raise web.HTTPError(
-                    403, "Only admins can spawn on behalf of other users"
-                )
+                if for_user.startswith('team-'):
+                    # TODO: and user belongs to that team
+                else:
+                    raise web.HTTPError(
+                        403, "Only admins can spawn on behalf of other users / or team members can spawn teams"
+                    )
+
             user = self.find_user(for_user)
             if user is None:
                 raise web.HTTPError(404, "No such user: %s" % for_user)
@@ -341,9 +348,13 @@ class SpawnPendingHandler(BaseHandler):
         user = current_user = self.current_user
         if for_user is not None and for_user != current_user.name:
             if not current_user.admin:
-                raise web.HTTPError(
-                    403, "Only admins can spawn on behalf of other users"
-                )
+                if for_user.startswith('team-'):
+                    # TODO: and user belongs to that team
+                else:
+                    raise web.HTTPError(
+                        403, "Only admins can spawn on behalf of other users / or team members can spawn teams"
+                    )
+
             user = self.find_user(for_user)
             if user is None:
                 raise web.HTTPError(404, "No such user: %s" % for_user)
