@@ -136,7 +136,7 @@ class HubAuth(SingletonConfigurable):
     hub_host = Unicode(
         '',
         help="""The public host of JupyterHub
-        
+
         Only used if JupyterHub is spreading servers across subdomains.
         """,
     ).tag(config=True)
@@ -556,7 +556,7 @@ class HubOAuth(HubAuth):
 
     oauth_client_id = Unicode(
         help="""The OAuth client ID for this application.
-        
+
         Use JUPYTERHUB_CLIENT_ID by default.
         """
     ).tag(config=True)
@@ -573,7 +573,7 @@ class HubOAuth(HubAuth):
 
     oauth_redirect_uri = Unicode(
         help="""OAuth redirect URI
-        
+
         Should generally be /base_url/oauth_callback
         """
     ).tag(config=True)
@@ -883,6 +883,7 @@ class HubAuthenticated(object):
             # group in allowed list
             return model
         else:
+            app_log.inf("model=%s", model)
             app_log.warning("Not allowing Hub user %s", name)
             raise UserNotAllowed(model)
 
