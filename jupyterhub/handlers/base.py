@@ -1420,6 +1420,25 @@ class UserUrlHandler(BaseHandler):
             admin_spawn = True
             should_spawn = True
             redirect_to_self = False
+        elif (
+            current_user
+            and current_user.name != user_name
+            and user_name.startswith('team-')
+            # TODO: and user belongs to that team
+        ):
+            # allow members to spawn on behalf of their teams
+            user = self.find_user(user_name)
+            if user is None:
+                # no such user
+                raise web.HTTPError(404, "No such user %s" % user_name)
+            self.log.info(
+                "Team member %s requesting spawn on behalf of %s",
+                current_user.name,
+                user.name,
+            )
+            admin_spawn = False
+            should_spawn = True
+            redirect_to_self = False
         else:
             user = current_user
             admin_spawn = False
