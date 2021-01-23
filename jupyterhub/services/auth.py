@@ -886,20 +886,30 @@ class HubAuthenticated(object):
             # group in allowed list
             return model
         else:
-            app_log.warning("check_hub_user::model=%s", model)
-            app_log.warning("check_hub_user::self=%s", self)
-            app_log.warning("check_hub_user::self.hub_auth=%s", self.hub_auth)
-            app_log.warning("check_hub_user::self.hub_auth.oauth_redirect_uri=%s", self.hub_auth.oauth_redirect_uri)
-            # app_log.warning("check_hub_user::dir()=%s", dir())
-            # app_log.warning("check_hub_user::locals()=%s", locals())
-
-            # tmp = locals().copy()
-            # [app_log.warning(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items() if not k.startswith('_') and k!='tmp' and k!='In' and k!='Out' and not hasattr(v, '__call__')]
-
             # model={'kind': 'user', 'name': 'lgallucci', 'admin': False,
             # 'groups': [], 'server': '/user/lgallucci/', 'pending': None,
             # 'created': '2020-05-18T22:23:46.334595Z',
             # 'last_activity': '2021-01-23T07:25:11.492353Z', 'servers': None}
+            # app_log.warning("check_hub_user::model=%s", model)
+
+            # self=<jupyterhub.singleuser.mixins.TreeHandler object at 0x7fae974005d0>
+            # app_log.warning("check_hub_user::self=%s", self)
+
+            # self.hub_auth=<jupyterhub.services.auth.HubOAuth object at 0x7faea32f5710>
+            # app_log.warning("check_hub_user::self.hub_auth=%s", self.hub_auth)
+
+            # self.hub_auth.oauth_redirect_uri=/user/team-ml-experimentation/oauth_callback
+            app_log.warning("check_hub_user::self.hub_auth.oauth_redirect_uri=%s", self.hub_auth.oauth_redirect_uri)
+
+            # self.hub_auth.login_url
+            app_log.warning("check_hub_user::self.hub_auth.login_url=%s", self.hub_auth.login_url)
+
+            # self.hub_auth.base_url
+            app_log.warning("check_hub_user::self.hub_auth.base_url=%s", self.hub_auth.base_url)
+
+            # self.hub_auth.api_token
+            app_log.warning("check_hub_user::self.hub_auth.api_token=%s", self.hub_auth.api_token)
+
             app_log.warning("Not allowing Hub user %s", name)
             raise UserNotAllowed(model)
 
