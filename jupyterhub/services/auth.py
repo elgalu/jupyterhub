@@ -885,7 +885,7 @@ class HubAuthenticated(object):
             )
             # group in allowed list
             return model
-        elif self.hub_auth.base_url.startswith('/user/team-'):
+        elif self.hub_auth.oauth_client_id.startswith('jupyterhub-user-team-'):
             # TODO: check that also the team is in the user's allowed_groups
             allowed_groups=['team-ml-experimentation', 'team-saiki']
             app_log.debug(
@@ -894,8 +894,8 @@ class HubAuthenticated(object):
                 ','.join(sorted(allowed_groups)),
             )
 
-            # self.hub_auth.oauth_client_id=
-            app_log.debug("debug::check_hub_user::self.hub_auth.oauth_client_id=%s", self.hub_auth.oauth_client_id)
+            # self.hub_auth.oauth_client_id=jupyterhub-user-team-ml-experimentation
+            # app_log.debug("debug::check_hub_user::self.hub_auth.oauth_client_id=%s", self.hub_auth.oauth_client_id)
 
             return model
         else:
