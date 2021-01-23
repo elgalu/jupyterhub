@@ -302,13 +302,18 @@ class OAuthAuthorizeHandler(OAuthHandler, BaseHandler):
         # The scopes the user actually authorized, i.e. checkboxes
         # that were selected.
         scopes = self.get_arguments('scopes')
+        self.log.info("scopes=%s", scopes)
         # credentials we need in the validator
         credentials = self.add_credentials()
+        self.log.info("credentials=%s", credentials)
 
         try:
             headers, body, status = self.oauth_provider.create_authorization_response(
                 uri, http_method, body, headers, scopes, credentials
             )
+            self.log.info("headers=%s", headers)
+            self.log.info("status=%s", status)
+            self.log.info("body=%s", body)
         except oauth2.FatalClientError as e:
             raise web.HTTPError(e.status_code, e.description)
         else:
