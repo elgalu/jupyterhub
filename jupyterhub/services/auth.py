@@ -885,6 +885,19 @@ class HubAuthenticated(object):
             )
             # group in allowed list
             return model
+        elif self.hub_auth.base_url.startswith('/user/team-'):
+            # TODO: check that also the team is in the user's allowed_groups
+            allowed_groups=['team-ml-experimentation', 'team-saiki']
+            app_log.debug(
+                "Allowing Hub team user member %s part of group(s) %s",
+                name,
+                ','.join(sorted(allowed_groups)),
+            )
+
+            # self.hub_auth.oauth_client_id=
+            app_log.debug("debug::check_hub_user::self.hub_auth.oauth_client_id=%s", self.hub_auth.oauth_client_id)
+
+            return model
         else:
             # model={'kind': 'user', 'name': 'lgallucci', 'admin': False,
             # 'groups': [], 'server': '/user/lgallucci/', 'pending': None,
@@ -898,17 +911,20 @@ class HubAuthenticated(object):
             # self.hub_auth=<jupyterhub.services.auth.HubOAuth object at 0x7faea32f5710>
             # app_log.warning("check_hub_user::self.hub_auth=%s", self.hub_auth)
 
+            # self.hub_auth.base_url=/user/team-ml-experimentation/
+            # app_log.warning("check_hub_user::self.hub_auth.base_url=%s", self.hub_auth.base_url)
+
+            # self.hub_auth.oauth_client_id
+            app_log.warning("check_hub_user::self.hub_auth.oauth_client_id=%s", self.hub_auth.oauth_client_id)
+
             # self.hub_auth.oauth_redirect_uri=/user/team-ml-experimentation/oauth_callback
-            app_log.warning("check_hub_user::self.hub_auth.oauth_redirect_uri=%s", self.hub_auth.oauth_redirect_uri)
+            # app_log.warning("check_hub_user::self.hub_auth.oauth_redirect_uri=%s", self.hub_auth.oauth_redirect_uri)
 
-            # self.hub_auth.login_url
-            app_log.warning("check_hub_user::self.hub_auth.login_url=%s", self.hub_auth.login_url)
+            # self.hub_auth.login_url=/hub/api/oauth2/authorize?client_id=jupyterhub-user-team-ml-experimentation&redirect_uri=%2Fuser%2Fteam-ml-experimentation%2Foauth_callback&response_type=code
+            # app_log.warning("check_hub_user::self.hub_auth.login_url=%s", self.hub_auth.login_url)
 
-            # self.hub_auth.base_url
-            app_log.warning("check_hub_user::self.hub_auth.base_url=%s", self.hub_auth.base_url)
-
-            # self.hub_auth.api_token
-            app_log.warning("check_hub_user::self.hub_auth.api_token=%s", self.hub_auth.api_token)
+            # self.hub_auth.api_token=8117ab74***********************1686c571
+            # app_log.warning("check_hub_user::self.hub_auth.api_token=%s", self.hub_auth.api_token)
 
             app_log.warning("Not allowing Hub user %s", name)
             raise UserNotAllowed(model)
