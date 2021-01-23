@@ -888,11 +888,13 @@ class HubAuthenticated(object):
         else:
             app_log.warning("check_hub_user::model=%s", model)
             app_log.warning("check_hub_user::self=%s", self)
-            app_log.warning("check_hub_user::dir()=%s", dir())
-            app_log.warning("check_hub_user::locals()=%s", locals())
+            app_log.warning("check_hub_user::self.hub_auth=%s", self.hub_auth)
+            app_log.warning("check_hub_user::self.hub_auth.oauth_redirect_uri=%s", self.hub_auth.oauth_redirect_uri)
+            # app_log.warning("check_hub_user::dir()=%s", dir())
+            # app_log.warning("check_hub_user::locals()=%s", locals())
 
-            tmp = locals().copy()
-            [app_log.warning(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items() if not k.startswith('_') and k!='tmp' and k!='In' and k!='Out' and not hasattr(v, '__call__')]
+            # tmp = locals().copy()
+            # [app_log.warning(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items() if not k.startswith('_') and k!='tmp' and k!='In' and k!='Out' and not hasattr(v, '__call__')]
 
             # model={'kind': 'user', 'name': 'lgallucci', 'admin': False,
             # 'groups': [], 'server': '/user/lgallucci/', 'pending': None,
