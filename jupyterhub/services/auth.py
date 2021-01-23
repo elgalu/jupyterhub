@@ -758,6 +758,9 @@ class UserNotAllowed(Exception):
 
     def __init__(self, model):
         self.model = model
+        app_log.debug("UserNotAllowed model=%s", model)
+        import traceback
+        traceback.print_stack()
 
     def __str__(self):
         return '<{cls} {kind}={name}>'.format(
