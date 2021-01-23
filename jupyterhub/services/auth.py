@@ -891,8 +891,8 @@ class HubAuthenticated(object):
             app_log.warning("check_hub_user::dir()=%s", dir())
             app_log.warning("check_hub_user::locals()=%s", locals())
 
-           tmp = locals().copy()
-           [app_log.warning(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items() if not k.startswith('_') and k!='tmp' and k!='In' and k!='Out' and not hasattr(v, '__call__')]
+            tmp = locals().copy()
+            [app_log.warning(k,'  :  ',v,' type:' , type(v)) for k,v in tmp.items() if not k.startswith('_') and k!='tmp' and k!='In' and k!='Out' and not hasattr(v, '__call__')]
 
             # model={'kind': 'user', 'name': 'lgallucci', 'admin': False,
             # 'groups': [], 'server': '/user/lgallucci/', 'pending': None,
