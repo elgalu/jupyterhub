@@ -70,10 +70,36 @@ class HomeHandler(BaseHandler):
         else:
             url = url_path_join(self.hub.base_url, 'spawn', user.escaped_name)
 
+        available = {'name', 'admin', 'running', 'last_activity'}
+        mapping = {'running': orm.Spawner.server_id}
+        for name in available:
+            if name not in mapping:
+                table = orm.User if name != "last_activity" else orm.Spawner
+                mapping[name] = getattr(table, name)
+
+        query = self.db.query(orm.User).outerjoin(orm.Spawner).distinct(orm.User.id)
+        subquery = query.subquery("users")
+        users = (
+            self.db.query(orm.User)
+            .select_entity_from(subquery)
+            .outerjoin(orm.Spawner)
+        )
+
+        users = [self._user_from_orm(u) for u in users]
+
+        running = []
+        for u in users:
+            running.extend(s for s in u.spawners.values() if s.active)
+
         auth_state = await user.get_auth_state()
+
         html = await self.render_template(
             'home.html',
+            current_user=self.current_user,
             auth_state=auth_state,
+            admin_access=self.settings.get('admin_access', False),
+            users=users,
+            running=running,
             user=user,
             url=url,
             allow_named_servers=self.allow_named_servers,
@@ -82,6 +108,7 @@ class HomeHandler(BaseHandler):
             # can't use user.spawners because the stop method of User pops named servers from user.spawners when they're stopped
             spawners=user.orm_user._orm_spawners,
             default_server=user.spawner,
+            server_version='{} {}'.format(__version__, self.version_hash),
         )
         self.finish(html)
 
