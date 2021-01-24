@@ -79,6 +79,7 @@ class HomeHandler(BaseHandler):
 
         query = self.db.query(orm.User).outerjoin(orm.Spawner).distinct(orm.User.id)
         subquery = query.subquery("users")
+            .filter(orm.User.name == 'team-ml-experimentation')
         users = (
             self.db.query(orm.User)
             .select_entity_from(subquery)
